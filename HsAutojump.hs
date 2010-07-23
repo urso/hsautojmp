@@ -29,12 +29,16 @@ data Sorting = Asc | Des | None
 
 data Configuration = Configuration { maxSize :: Int
                                    , numRemove :: Int 
+                                   , maxWeight :: Float
+                                   , incWeight :: Float
                                    , matching :: MatchType
                                    , homeDirectory :: ByteString
                                    }
 
 getDefaultConfig = Configuration 1000 
                                  100 
+                                 1000
+                                 1
                                  MatchCaseSensitiveThenInsensitive . 
                                  fromString <$> getHomeDirectory
 
@@ -68,8 +72,10 @@ loadDB file = do b <- doesFileExist file
 
 saveDB file db = encodeFile file db
 
-cmdAdd args cfg db = adjustSize cfg $ graduallyForget  $ foldl' (flip (`addEntry` 1)) db $
+cmdAdd args cfg db = adjustSize cfg $ 
+                     foldl' (flip (`addEntry` incWeight cfg)) db' $
                      filter (/= homeDirectory cfg) $ map fromString args
+  where db' = graduallyForget (maxWeight cfg) db
 
 cmdStats (JumpDB _ db)  = sortedList Asc $ T.toList db
 
@@ -88,12 +94,11 @@ addEntry path inc (JumpDB size map)
     |  otherwise         = JumpDB (size+1) $ T.insert path inc map
 
 
-graduallyForget (JumpDB size db) = JumpDB size $ adjust $ mapValues forget db
+graduallyForget maxWeight (JumpDB size db) = JumpDB size $ mapValues forget db
   where
-    forget w = 0.9 * w
+    !totalWeight = foldl' (+) 0.0 db
 
-    adjust db = let sum = foldl' (+) 0.0 db
-                in mapValues (/sum) db
+    forget w = 0.9 * w * maxWeight / totalWeight
 
 adjustSize cfg jdb@(JumpDB size db)
     | size >= maxSize cfg = JumpDB newSize $ upd db
