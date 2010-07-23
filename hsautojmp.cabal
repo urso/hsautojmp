@@ -1,0 +1,32 @@
+Name:                hsautojump
+Version:             0.1
+-- Synopsis:            
+-- Description:         
+License:             BSD3
+License-file:        LICENSE
+Author:              Steffen Siering
+Maintainer:          steffen.siering <at> gmail <dot> com
+
+-- A copyright notice.
+-- Copyright:           
+
+-- Category:            
+
+Build-type:          Simple
+Cabal-version:       >=1.2
+
+Executable hsautojmp
+  Main-is: HsAutojump.hs
+  
+  -- Packages needed in order to build this package.
+  Build-depends: haskell98 == 1.*, 
+                 directory == 1.*, 
+                 pcre-light == 0.3.*, 
+                 utf8-string == 0.3.*, 
+                 base == 4.2.*, 
+                 binary == 0.5.*, 
+                 bytestring == 0.9.*,
+                 bytestring-trie == 0.2.*
+
+  ghc-options: -O2 -fvia-C -optc -O3
+  

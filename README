@@ -1,0 +1,20 @@
+simple autojump clone in Haskell.
+
+Unfortunatelly autojump became very instable lately for me + corrupting the database much too often 
+
+- supports glob patterns
+- case sensitive and insensitive pattern matching
+
+(Testet with zsh only yet)
+
+INSTALL
+=======
+
+- install hsautojmp via cabal: "cabal install"
+  (on mac if you use macports on error type: "cabal install --extra-lib-dirs=/usr/lib")
+
+- source "zsh/hsautojmp.zsh" to enable commands "j" and "jumpstat"
+
+- copy "zsh/functions/_j" file to zsh's functions folder (e.g.
+  "$HOME/.zsh/functions") for autocompletion for "j" command.
+
