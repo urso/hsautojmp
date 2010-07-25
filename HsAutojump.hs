@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 
 module Main where
 
@@ -8,14 +9,14 @@ import qualified Data.Trie as T (Trie, size, member, empty, adjust, insert, mapB
 import Data.Foldable (foldl')
 import Data.Function (on)
 import Data.List (sortBy, nub)
-import Data.ByteString as BS (ByteString, putStrLn, append, empty)
-import qualified Data.ByteString.Lazy as LBS (hGetContents)
+import Data.ByteString as BS (ByteString, putStrLn, append, empty, readFile)
+import qualified Data.ByteString.Lazy as LBS (fromChunks)
 import Data.Binary (Binary, encodeFile, decode, get, put)
 import Data.Maybe (isJust)
 import qualified Text.Regex.PCRE.Light as R (compileM, caseless, match, exec_no_utf8_check)
 import System.Directory (doesFileExist, doesDirectoryExist, getHomeDirectory)
 import System (getArgs)
-import System.IO as SIO (putStrLn, openBinaryFile, IOMode(..), hClose)
+import System.IO as SIO (putStrLn)
 import Data.ByteString.UTF8 (fromString, toString)
 
 getDBFile = (++ "/.hsautojmp.db") <$> getHomeDirectory
@@ -42,8 +43,8 @@ getDefaultConfig = Configuration 1000
                                  MatchCaseSensitiveThenInsensitive . 
                                  fromString <$> getHomeDirectory
 
-data JumpDB = JumpDB { size :: Int,
-                       _map :: (T.Trie Float) }
+data JumpDB = JumpDB { size :: !Int,
+                       _map :: !(T.Trie Float) }
   deriving(Show)
 
 instance Binary JumpDB where
@@ -93,7 +94,6 @@ addEntry path inc (JumpDB size map)
     |  T.member path map = JumpDB size $ T.adjust (+inc) path map
     |  otherwise         = JumpDB (size+1) $ T.insert path inc map
 
-
 graduallyForget maxWeight (JumpDB size db) = JumpDB size $ mapValues forget db
   where
     !totalWeight = foldl' (+) 0.0 db
@@ -136,19 +136,10 @@ sortedList None = id
 mapValues f m = T.mapBy fn m
   where fn _ = Just . f
 
-maxEntry = maxEntry' Nothing (-1.0)
-  where
-    maxEntry' v k [] = v
-    maxEntry' v k ((v', k'):xs)
-      | k' > k    = maxEntry' (Just v') k' xs
-      | otherwise = maxEntry' v k xs
-
 showEntry (path, w) = fromString ("(" ++ show w ++ "): ") `append` path
 
-decodeFile' path = bracket (openBinaryFile path ReadMode) hClose doDecode
-  where
-    doDecode h = do c <- LBS.hGetContents h
-                    return $! decode c
+decodeFile' path = do !v <- decode . LBS.fromChunks . return <$> BS.readFile path
+                      return v
 
 globToRegex "" = ""
 globToRegex ('*':xs) = ".*" ++ globToRegex xs
@@ -165,6 +156,5 @@ fromRight _ (Right x)  = x
 withRight f (Left x) = Left x
 withRight f (Right x) = Right (f x)
 
-putLinesWith f []     = return ()
-putLinesWith f (x:xs) = BS.putStrLn (f x) >> putLinesWith f xs
+putLinesWith f = mapM_ (BS.putStrLn . f)
 
