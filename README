@@ -2,8 +2,10 @@ simple autojump clone in Haskell.
 
 Unfortunatelly autojump became very instable lately for me + corrupting the database much too often 
 
+additional features:
+
 - supports glob patterns
-- case sensitive and insensitive pattern matching
+- case sensitive first and then insensitive pattern matching
 
 (Testet with zsh only yet)
 
