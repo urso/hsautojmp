@@ -2,22 +2,29 @@
 
 module Main where
 
-import Control.Applicative ((<$>))
+import Control.Applicative ((<$>) )
+import Control.Arrow (right)
 import Control.Monad (filterM)
 import Control.Exception (bracket)
 import qualified Data.Trie as T (Trie, size, member, empty, adjust, insert, mapBy, toList, fromList)
 import Data.Foldable (foldl')
 import Data.Function (on)
 import Data.List (sortBy, nub)
-import Data.ByteString as BS (ByteString, putStrLn, append, empty, readFile)
-import qualified Data.ByteString.Lazy as LBS (fromChunks)
-import Data.Binary (Binary, encodeFile, decode, get, put)
+import Data.ByteString as BS (ByteString, putStrLn, append, empty, readFile, length)
+import qualified Data.ByteString.Lazy as LBS (fromChunks, empty)
+import qualified Data.ByteString.Lazy.Internal as LBS
+import Data.Binary (Binary, encodeFile, decode, encode, get, put)
 import Data.Maybe (isJust)
 import qualified Text.Regex.PCRE.Light as R (compileM, caseless, match, exec_no_utf8_check)
 import System.Directory (doesFileExist, doesDirectoryExist, getHomeDirectory)
 import System (getArgs)
-import System.IO as SIO (putStrLn)
+import System.IO as SIO (putStrLn, withBinaryFile, IOMode(ReadMode))
+import System.IO.Unsafe (unsafeInterleaveIO)
+import System.Posix.IO
 import Data.ByteString.UTF8 (fromString, toString)
+import Data.ByteString.Unsafe (unsafePackCStringFinalizer, unsafeUseAsCString)
+import Foreign (mallocBytes, free, castPtr)
+import GHC.IO.Device (SeekMode(AbsoluteSeek))
 
 getDBFile = (++ "/.hsautojmp.db") <$> getHomeDirectory
 getConfigFile = (++ "/.hsautojmp.conf") <$> getHomeDirectory
@@ -44,7 +51,7 @@ getDefaultConfig = Configuration 1000
                                  fromString <$> getHomeDirectory
 
 data JumpDB = JumpDB { size :: !Int,
-                       _map :: !(T.Trie Float) }
+                       dbData :: !(T.Trie Float) }
   deriving(Show)
 
 instance Binary JumpDB where
@@ -68,10 +75,9 @@ main = do
                   BS.putStrLn
     _          -> SIO.putStrLn "error: unknown command"
 
-loadDB file = do b <- doesFileExist file
-                 if b then decodeFile' file else return (JumpDB 0 T.empty)
+loadDB file = safeDecodeFile (JumpDB 0 T.empty) file
 
-saveDB file db = encodeFile file db
+saveDB file db = safeEncodeFile file db
 
 cmdAdd args cfg db = adjustSize cfg $ 
                      foldl' (flip (`addEntry` incWeight cfg)) db' $
@@ -80,7 +86,7 @@ cmdAdd args cfg db = adjustSize cfg $
 
 cmdStats (JumpDB _ db)  = sortedList Asc $ T.toList db
 
-cmdLstMatch [] cfg    = filterM isValidPath . sortedList Des . T.toList . _map
+cmdLstMatch [] cfg    = filterM isValidPath . sortedList Des . T.toList . dbData
 cmdLstMatch (x:_) cfg = filterM isValidPath . match (matching cfg) Des (fromString x) 
 
 cmdMatch [] cfg (JumpDB _ db) = return BS.empty
@@ -116,7 +122,7 @@ match matching sortOpt path jdb@(JumpDB _ db) =
            match MatchCaseInsensitive sortOpt path jdb)
 
 match' path caseSensitive trie = 
-    withRight filterWithRegex $ R.compileM path opts
+    right filterWithRegex $ R.compileM path opts
   where
     opts | caseSensitive = [R.caseless]
          | otherwise     = []
@@ -136,10 +142,50 @@ sortedList None = id
 mapValues f m = T.mapBy fn m
   where fn _ = Just . f
 
-showEntry (path, w) = fromString ("(" ++ show w ++ "): ") `append` path
+showEntry (path, w) = fromString ("(" ++ show w ++ "): ") `BS.append` path
 
-decodeFile' path = do !v <- decode . LBS.fromChunks . return <$> BS.readFile path
-                      return v
+safeEncodeFile path value = do
+    fd <- openFd path WriteOnly (Just 0o600) (defaultFileFlags {trunc = True})
+    waitToSetLock fd (WriteLock, AbsoluteSeek, 0, 0)
+    let cs = encode value
+    let outFn = LBS.foldrChunks (\c rest -> writeChunk fd c >> rest) (return ()) cs
+    outFn
+    closeFd fd
+  where
+    writeChunk fd bs = unsafeUseAsCString bs $ \ptr ->
+                         fdWriteBuf fd (castPtr ptr) (fromIntegral $ BS.length bs)
+
+safeDecodeFile def path = do 
+    e <- doesFileExist path
+    if e 
+      then do fd <- openFd path ReadOnly Nothing 
+                           (defaultFileFlags{nonBlock=True})
+              waitToSetLock fd (ReadLock, AbsoluteSeek, 0, 0)
+              c  <- fdGetContents fd
+              let !v = decode $! c
+              return v
+      else return def
+
+fdGetContents fd = lazyRead
+  where 
+    lazyRead = unsafeInterleaveIO loop
+
+    loop = do blk <- readBlock fd
+              case blk of
+                Nothing -> return LBS.Empty
+                Just c  -> do cs <- lazyRead
+                              return (LBS.Chunk c cs)
+
+readBlock fd = do buf <- mallocBytes 4096
+                  readSize <- fdReadBuf fd buf 4096
+                  if readSize == 0
+                    then do free buf 
+                            closeFd fd 
+                            return Nothing
+                    else do bs <- unsafePackCStringFinalizer buf 
+                                         (fromIntegral readSize)
+                                         (free buf)
+                            return $ Just bs
 
 globToRegex "" = ""
 globToRegex ('*':xs) = ".*" ++ globToRegex xs
@@ -152,9 +198,6 @@ globToRegex (x:xs)   = escape x ++ globToRegex xs
 
 fromRight def (Left _) = def
 fromRight _ (Right x)  = x
-
-withRight f (Left x) = Left x
-withRight f (Right x) = Right (f x)
 
 putLinesWith f = mapM_ (BS.putStrLn . f)
 

@@ -26,7 +26,8 @@ Executable hsautojmp
                  base == 4.2.*, 
                  binary == 0.5.*, 
                  bytestring == 0.9.*,
-                 bytestring-trie == 0.2.*
+                 bytestring-trie == 0.2.*,
+                 unix == 2.4.*
 
   ghc-options: -O2 -fvia-C -optc -O3
   
