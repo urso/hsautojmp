@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE BangPatterns #-}
 
 module Main where
@@ -25,15 +26,37 @@ import Data.ByteString.UTF8 (fromString, toString)
 import Data.ByteString.Unsafe (unsafePackCStringFinalizer, unsafeUseAsCString)
 import Foreign (mallocBytes, free, castPtr)
 import GHC.IO.Device (SeekMode(AbsoluteSeek))
+import Data.Monoid
+
+instance Monoid (a -> a -> Ordering) where
+  mempty = \ a b -> EQ
+  cmpA `mappend` cmpB = \ x y -> case cmpA x y of
+                                   EQ -> cmpB x y
+                                   c  -> c
 
 getDBFile = (++ "/.hsautojmp.db") <$> getHomeDirectory
 getConfigFile = (++ "/.hsautojmp.conf") <$> getHomeDirectory
 
-data MatchType = MatchCaseSensitive 
-               | MatchCaseInsensitive 
-               | MatchCaseSensitiveThenInsensitive
+data MatchCaseSensitivity = MatchCaseSensitive 
+                          | MatchCaseInsensitive 
+                          | MatchCaseSensitiveThenInsensitive
+
+data MatchSorting = MatchShortestFirst
+                  | MatchLongestFirst
+                  | MatchHighestScore
+                  | MatchLowestScore
+
+type ScoringTest = (ByteString, Float) -> (ByteString, Float) -> Ordering
+
+sorting2CmpFn :: ByteString -> MatchSorting -> ScoringTest
+sorting2CmpFn _ MatchShortestFirst = compare `on` (BS.length . fst)
+sorting2CmpFn _ MatchLongestFirst  = invert (compare `on` (BS.length . fst))
+sorting2CmpFn _ MatchLowestScore   = compare `on` snd
+sorting2CmpFn _ MatchHighestScore  = invert (compare `on` snd)
 
 data Sorting = Asc | Des | None
+
+type MatchType = (MatchCaseSensitivity, ScoringTest)
 
 data Configuration = Configuration { maxSize :: Int
                                    , numRemove :: Int 
@@ -47,7 +70,8 @@ getDefaultConfig = Configuration 1000
                                  100 
                                  1000
                                  1
-                                 MatchCaseSensitiveThenInsensitive . 
+                                 (MatchCaseSensitiveThenInsensitive, 
+                                  sorting2CmpFn undefined MatchHighestScore) . 
                                  fromString <$> getHomeDirectory
 
 data JumpDB = JumpDB { size :: !Int,
@@ -66,7 +90,7 @@ main = do
   cfg    <- getDefaultConfig
   case head args of
     "add"      -> saveDB dbFile $ cmdAdd (tail args) cfg db
-    "stats"    -> putLinesWith showEntry $ cmdStats db
+    "stats"    -> putLinesWith showEntry $ cmdStats cfg db
     "complete" -> cmdLstMatch (map globToRegex (tail args)) cfg db >>=
                   putLinesWith fst 
     "lstmatch" -> cmdLstMatch (map globToRegex (tail args)) cfg db >>=
@@ -84,9 +108,9 @@ cmdAdd args cfg db = adjustSize cfg $
                      filter (/= homeDirectory cfg) $ map fromString args
   where db' = graduallyForget (maxWeight cfg) db
 
-cmdStats (JumpDB _ db)  = sortedList Asc $ T.toList db
+cmdStats cfg (JumpDB _ db)  = sortedList Asc (snd $ matching cfg) $ T.toList db
 
-cmdLstMatch [] cfg    = filterM isValidPath . sortedList Des . T.toList . dbData
+cmdLstMatch [] cfg    = filterM isValidPath . sortedList Des (snd $ matching cfg) . T.toList . dbData
 cmdLstMatch (x:_) cfg = filterM isValidPath . match (matching cfg) Des (fromString x) 
 
 cmdMatch [] cfg (JumpDB _ db) = return BS.empty
@@ -111,15 +135,15 @@ adjustSize cfg jdb@(JumpDB size db)
     | otherwise           = jdb
   where
     newSize = maxSize cfg - numRemove cfg
-    upd = T.fromList . take newSize . sortedList Des . T.toList
+    upd = T.fromList . take newSize . sortedList Des (snd $ matching cfg) . T.toList
 
-match matching sortOpt path jdb@(JumpDB _ db) = 
+match (matching,matchSorting) sortOpt path jdb@(JumpDB _ db) = 
   case matching of
-    MatchCaseSensitive   -> sortedList sortOpt $ fromRight [] $ match' path True db
-    MatchCaseInsensitive -> sortedList sortOpt $ fromRight [] $  match' path False db
+    MatchCaseSensitive   -> sortedList sortOpt matchSorting $ fromRight [] $ match' path True db
+    MatchCaseInsensitive -> sortedList sortOpt matchSorting $ fromRight [] $  match' path False db
     MatchCaseSensitiveThenInsensitive -> 
-      nub (match MatchCaseSensitive sortOpt path jdb ++ 
-           match MatchCaseInsensitive sortOpt path jdb)
+      nub (match (MatchCaseSensitive,matchSorting) sortOpt path jdb ++ 
+           match (MatchCaseInsensitive,matchSorting) sortOpt path jdb)
 
 match' path caseSensitive trie = 
     right filterWithRegex $ R.compileM path opts
@@ -135,9 +159,14 @@ match' path caseSensitive trie =
 
 isValidPath (path, _) = doesDirectoryExist $ toString path
 
-sortedList Asc  = sortBy (compare `on`  snd) 
-sortedList Des  = reverse . sortedList Asc
-sortedList None = id
+sortedList Des f  = sortBy f
+sortedList Asc f  = sortBy (invert f)
+sortedList None _ = id
+
+invert cmpr a b = case cmpr a b of
+                    LT -> GT
+                    GT -> LT
+                    EQ -> EQ
 
 mapValues f m = T.mapBy fn m
   where fn _ = Just . f
