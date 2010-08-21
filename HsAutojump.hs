@@ -144,9 +144,11 @@ mapValues f m = T.mapBy fn m
 
 showEntry (path, w) = fromString ("(" ++ show w ++ "): ") `BS.append` path
 
+tryLockFile fd lock = waitToSetLock fd (lock, AbsoluteSeek, 0, 0)
+
 safeEncodeFile path value = do
-    fd <- openFd path WriteOnly (Just 0o600) (defaultFileFlags {trunc = True})
-    waitToSetLock fd (WriteLock, AbsoluteSeek, 0, 0)
+    fd <- openFd path WriteOnly (Just 0o600) (defaultFileFlags {trunc = False})
+    tryLockFile fd WriteLock
     let cs = encode value
     let outFn = LBS.foldrChunks (\c rest -> writeChunk fd c >> rest) (return ()) cs
     outFn
@@ -160,7 +162,7 @@ safeDecodeFile def path = do
     if e 
       then do fd <- openFd path ReadOnly Nothing 
                            (defaultFileFlags{nonBlock=True})
-              waitToSetLock fd (ReadLock, AbsoluteSeek, 0, 0)
+              tryLockFile fd ReadLock
               c  <- fdGetContents fd
               let !v = decode $! c
               return v
@@ -173,8 +175,7 @@ fdGetContents fd = lazyRead
     loop = do blk <- readBlock fd
               case blk of
                 Nothing -> return LBS.Empty
-                Just c  -> do cs <- lazyRead
-                              return (LBS.Chunk c cs)
+                Just c  -> LBS.Chunk c <$> lazyRead
 
 readBlock fd = do buf <- mallocBytes 4096
                   readSize <- fdReadBuf fd buf 4096
@@ -182,10 +183,9 @@ readBlock fd = do buf <- mallocBytes 4096
                     then do free buf 
                             closeFd fd 
                             return Nothing
-                    else do bs <- unsafePackCStringFinalizer buf 
+                    else Just <$> unsafePackCStringFinalizer buf
                                          (fromIntegral readSize)
                                          (free buf)
-                            return $ Just bs
 
 globToRegex "" = ""
 globToRegex ('*':xs) = ".*" ++ globToRegex xs
