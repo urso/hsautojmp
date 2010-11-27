@@ -4,6 +4,7 @@
 module Main where
 
 import Control.Applicative ((<$>) )
+import Control.Concurrent (threadDelay)
 import Control.Arrow (right)
 import Control.Monad (filterM)
 import Control.Exception (bracket)
@@ -173,7 +174,8 @@ mapValues f m = T.mapBy fn m
 
 showEntry (path, w) = fromString ("(" ++ show w ++ "): ") `BS.append` path
 
-tryLockFile fd lock = waitToSetLock fd (lock, AbsoluteSeek, 0, 0)
+tryLockFile fd lock = waitToSetLock fd (lock, AbsoluteSeek, 0, 0) `catch` (\_ ->
+  threadDelay 500 >> waitToSetLock fd (lock, AbsoluteSeek, 0, 0))
 
 safeEncodeFile path value = do
     fd <- openFd path WriteOnly (Just 0o600) (defaultFileFlags {trunc = False})
