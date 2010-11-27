@@ -28,7 +28,9 @@ Executable hsautojmp
                  binary == 0.5.*, 
                  bytestring == 0.9.*,
                  bytestring-trie == 0.2.*,
-                 unix == 2.4.*
+                 unix == 2.4.*,
+                 cautious-file == 0.1.*
+
 
   ghc-options: -O2 -fvia-C -optc -O3
   
