@@ -14,6 +14,16 @@ data JumpDB = JumpDB { size :: !Int,
                        dbData :: !(T.Trie Float) }
   deriving(Show)
 
+emptyDB :: JumpDB
+emptyDB = (JumpDB 0 T.empty)
+
+dbFromTrie t = JumpDB (T.size t) t
+dbToTrie (JumpDB _ t) = t
+
+dbFromList = dbFromTrie . T.fromList
+
+dbToList = T.toList . dbToTrie
+
 addEntry :: BS.ByteString -> Float -> JumpDB -> JumpDB
 addEntry path inc (JumpDB size map) 
     |  T.member path map = JumpDB size $ T.adjust (+inc) path map
