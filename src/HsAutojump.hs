@@ -3,13 +3,13 @@
 
 module Main where
 
-import Control.Applicative ((<$>) )
+import Control.Applicative ((<$>))
 import Control.Arrow (right)
 import Control.Monad (filterM)
-import qualified Data.Trie as T (Trie, size, member, empty, adjust, insert, mapBy, toList, fromList)
+import qualified Data.Trie as T (Trie, mapBy)
 import Data.Foldable (foldl')
 import Data.List (nub)
-import Data.ByteString as BS (ByteString, putStrLn, append, empty, length)
+import Data.ByteString as BS (ByteString, putStrLn, empty)
 import Data.Maybe (isJust)
 import qualified Text.Regex.PCRE.Light as R (compileM, caseless, match, exec_no_utf8_check)
 import System.Directory (doesDirectoryExist, getHomeDirectory)
@@ -46,9 +46,9 @@ cmdAdd args cfg db = adjustSize (maxSize cfg) (numRemove cfg) (matching cfg) $
                      filter (/= homeDirectory cfg) $ map fromString args
   where db' = graduallyForget (maxWeight cfg) db
 
-cmdStats cfg (JumpDB _ db)  = sortedList Asc (snd $ matching cfg) $ T.toList db
+cmdStats cfg = sortedList Asc (snd $ matching cfg) . dbToList
 
-cmdLstMatch [] cfg    = filterM isValidPath . sortedList Des (snd $ matching cfg) . T.toList . dbData
+cmdLstMatch [] cfg    = filterM isValidPath . sortedList Des (snd $ matching cfg) . dbToList
 cmdLstMatch (x:_) cfg = filterM isValidPath . match (matching cfg) Des (fromString x) 
 
 cmdMatch [] cfg (JumpDB _ db) = return BS.empty
