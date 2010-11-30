@@ -41,7 +41,7 @@ main = do
                   BS.putStrLn
     _          -> SIO.putStrLn "error: unknown command"
 
-cmdAdd args cfg db = adjustSize (maxSize cfg) (numRemove cfg) (matching cfg) $ 
+cmdAdd args cfg db = adjustSize (maxSize cfg) (numRemove cfg) (snd $ matching cfg) $ 
                      foldl' (flip (`addEntry` incWeight cfg)) db' $
                      filter (/= homeDirectory cfg) $ map fromString args
   where db' = graduallyForget (maxWeight cfg) db

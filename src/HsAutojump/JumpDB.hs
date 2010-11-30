@@ -17,11 +17,16 @@ data JumpDB = JumpDB { size :: !Int,
 emptyDB :: JumpDB
 emptyDB = (JumpDB 0 T.empty)
 
+dbFromTrie :: T.Trie Float -> JumpDB
 dbFromTrie t = JumpDB (T.size t) t
+
+dbToTrie :: JumpDB -> T.Trie Float
 dbToTrie (JumpDB _ t) = t
 
+dbFromList :: [(ByteString,Float)] -> JumpDB
 dbFromList = dbFromTrie . T.fromList
 
+dbToList :: JumpDB -> [(ByteString, Float)]
 dbToList = T.toList . dbToTrie
 
 addEntry :: BS.ByteString -> Float -> JumpDB -> JumpDB
@@ -39,12 +44,13 @@ graduallyForget maxWeight (JumpDB size db) = JumpDB size $ mapValues forget db
 mapValues :: (a -> a) -> T.Trie a -> T.Trie a
 mapValues = T.mapBy . const . (Just.)
 
+adjustSize :: Int -> Int -> ScoringTest -> JumpDB -> JumpDB
 adjustSize maxSize numRemove matching jdb@(JumpDB size db)
     | size >= maxSize = JumpDB newSize $ upd db
     | otherwise       = jdb
   where
     newSize = maxSize - numRemove 
-    upd = T.fromList . take newSize . sortedList Des (snd $ matching) . T.toList
+    upd = T.fromList . take newSize . sortedList Des matching . T.toList
 
 showEntry :: (BS.ByteString, Float) -> BS.ByteString
 showEntry (path, w) = fromString ("(" ++ show w ++ "): ") `BS.append` path
