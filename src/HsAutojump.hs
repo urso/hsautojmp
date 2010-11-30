@@ -6,7 +6,7 @@ module Main where
 import Control.Applicative ((<$>))
 import Control.Arrow (right)
 import Control.Monad (filterM)
-import qualified Data.Trie as T (Trie, mapBy)
+import qualified Data.Trie as T (Trie, mapBy, toList)
 import Data.Foldable (foldl')
 import Data.List (nub)
 import Data.ByteString as BS (ByteString, putStrLn, empty)
