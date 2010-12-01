@@ -12,7 +12,7 @@ import Data.List (nub)
 import Data.ByteString as BS (ByteString, putStrLn, empty)
 import Data.Maybe (isJust)
 import qualified Text.Regex.PCRE.Light as R (compileM, caseless, match, exec_no_utf8_check)
-import System.Directory (doesDirectoryExist, getHomeDirectory)
+import System.Directory (getHomeDirectory)
 import System (getArgs)
 import System.IO as SIO (putStrLn)
 import Data.ByteString.UTF8 (fromString, toString)
@@ -48,35 +48,30 @@ cmdAdd args cfg db = adjustSize (maxSize cfg) (numRemove cfg) (snd $ matching cf
 
 cmdStats cfg = sortedList Asc (snd $ matching cfg) . dbToList
 
-cmdLstMatch [] cfg    = filterM isValidPath . sortedList Des (snd $ matching cfg) . dbToList
-cmdLstMatch (x:_) cfg = filterM isValidPath . match (matching cfg) Des (fromString x) 
+cmdLstMatch [] cfg    = filterM (isValidPath.fst) . sortedList Des (snd $ matching cfg) . dbToList
+cmdLstMatch (x:_) cfg = filterM (isValidPath.fst) . match (matching cfg) Des (fromString x) 
 
 cmdMatch [] cfg (JumpDB _ db) = return BS.empty
 cmdMatch (x:_) cfg db = do
-    lst <- filterM isValidPath $ match (matching cfg) Des (fromString x) db
+    lst <- filterM (isValidPath.fst) $ match (matching cfg) Des (fromString x) db
     return $ case lst of
                []    -> BS.empty
                (x:_) -> fst x
 
-match (matching,matchSorting) sortOpt path jdb@(JumpDB _ db) = 
+match (matching,matchSorting) sortOpt path db = 
   case matching of
     MatchCaseSensitive   -> sortedList sortOpt matchSorting $ fromRight [] $ match' path True db
     MatchCaseInsensitive -> sortedList sortOpt matchSorting $ fromRight [] $  match' path False db
     MatchCaseSensitiveThenInsensitive -> 
-      nub (match (MatchCaseSensitive,matchSorting) sortOpt path jdb ++ 
-           match (MatchCaseInsensitive,matchSorting) sortOpt path jdb)
+      nub (match (MatchCaseSensitive,matchSorting) sortOpt path db ++ 
+           match (MatchCaseInsensitive,matchSorting) sortOpt path db)
 
-match' path caseSensitive trie = 
-    right filterWithRegex $ R.compileM path opts
+match' :: ByteString -> Bool -> JumpDB -> Either String [(ByteString, Float)]
+match' path caseSensitive db = right findWithRegex $ R.compileM path opts
   where
     opts | caseSensitive = [R.caseless]
          | otherwise     = []
 
-    filterWithRegex regex = T.toList $ T.mapBy (matchRegex regex) trie
-
-    matchRegex regex k x 
-      | isJust (R.match regex k [R.exec_no_utf8_check]) = Just x
-      | otherwise                                       = Nothing
-
-isValidPath (path, _) = doesDirectoryExist $ toString path
+    findWithRegex regex   = dbFindByPath (matchRegex regex) db
+    matchRegex regex path = isJust (R.match regex path [R.exec_no_utf8_check])
 

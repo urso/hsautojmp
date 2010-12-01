@@ -1,3 +1,4 @@
+
 {-# LANGUAGE BangPatterns #-}
 
 module HsAutojump.IO (loadDB, saveDB) where
@@ -26,3 +27,4 @@ decodeFileWithDefault def path = do
       then return def
       else do !c <- decodeFile path
               return c
+

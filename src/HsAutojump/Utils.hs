@@ -5,6 +5,8 @@ module HsAutojump.Utils where
 import Data.Monoid
 
 import Data.ByteString as BS (ByteString, putStrLn)
+import Data.ByteString.UTF8 (toString)
+import System.Directory (doesDirectoryExist)
 import Data.List (sortBy)
 
 data Sorting = Asc | Des | None
@@ -37,10 +39,12 @@ instance Monoid (a -> a -> Ordering) where
                                    EQ -> cmpB x y
                                    c  -> c
 
-
 invert ::  (a -> a -> Ordering) -> a -> a -> Ordering
 invert cmpr a b = case cmpr a b of
                     LT -> GT
                     GT -> LT
                     EQ -> EQ
+
+isValidPath ::  ByteString -> IO Bool
+isValidPath = doesDirectoryExist . toString
 
