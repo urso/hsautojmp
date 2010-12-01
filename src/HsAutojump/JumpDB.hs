@@ -3,7 +3,8 @@ module HsAutojump.JumpDB where
 
 import Data.ByteString as BS (ByteString,append)
 import Data.Foldable (foldl')
-import qualified Data.Trie as T (Trie, size, member, empty, adjust, insert, mapBy, toList, fromList)
+import qualified Data.Trie as T (Trie, size, member, empty, adjust, insert, 
+                                 mapBy, toList, fromList, lookup)
 
 import Data.ByteString.UTF8 (fromString)
 
@@ -28,6 +29,21 @@ dbFromList = dbFromTrie . T.fromList
 
 dbToList :: JumpDB -> [(ByteString, Float)]
 dbToList = T.toList . dbToTrie
+
+dbContains :: ByteString -> JumpDB -> Bool
+dbContains e (JumpDB _ t) = T.member e t
+
+dbLookup :: ByteString -> JumpDB -> Maybe Float
+dbLookup e (JumpDB _ t) = T.lookup e t
+
+dbFindBy :: (ByteString -> Float -> Bool) -> JumpDB -> [(ByteString,Float)]
+dbFindBy f = filter (uncurry f) . dbToList
+
+dbFindByPath :: (ByteString -> Bool) -> JumpDB -> [(ByteString,Float)]
+dbFindByPath f = dbFindBy (const.f)
+
+dbFindByWeight :: (Float -> Bool) -> JumpDB -> [(ByteString,Float)]
+dbFindByWeight f = dbFindBy (\_ w -> f w)
 
 addEntry :: BS.ByteString -> Float -> JumpDB -> JumpDB
 addEntry path inc (JumpDB size map) 
