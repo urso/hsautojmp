@@ -10,8 +10,6 @@ import qualified Data.Trie as T (Trie, mapBy, toList)
 import Data.Foldable (foldl')
 import Data.List (nub)
 import Data.ByteString as BS (ByteString, putStrLn, empty)
-import Data.Maybe (isJust)
-import qualified Text.Regex.PCRE.Light as R (compileM, caseless, match, exec_no_utf8_check)
 import System.Directory (getHomeDirectory)
 import System (getArgs)
 import System.IO as SIO (putStrLn)
@@ -20,6 +18,7 @@ import Data.ByteString.UTF8 (fromString, toString)
 import HsAutojump.Config
 import HsAutojump.IO
 import HsAutojump.JumpDB
+import HsAutojump.Regex
 import HsAutojump.Utils
 
 getDBFile = (++ "/.hsautojmp.db") <$> getHomeDirectory
@@ -66,12 +65,8 @@ match (matching,matchSorting) sortOpt path db =
       nub (match (MatchCaseSensitive,matchSorting) sortOpt path db ++ 
            match (MatchCaseInsensitive,matchSorting) sortOpt path db)
 
-match' :: ByteString -> Bool -> JumpDB -> Either String [(ByteString, Float)]
-match' path caseSensitive db = right findWithRegex $ R.compileM path opts
+match' path caseSensitive db = right findWithRegex regex
   where
-    opts | caseSensitive = [R.caseless]
-         | otherwise     = []
-
-    findWithRegex regex   = dbFindByPath (matchRegex regex) db
-    matchRegex regex path = isJust (R.match regex path [R.exec_no_utf8_check])
+    regex = compileRegex $ regexCase caseSensitive path
+    findWithRegex regex = dbFindByPath (=~ regex) db
 
