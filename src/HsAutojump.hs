@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE BangPatterns #-}
 
 module Main where
 
@@ -15,10 +13,11 @@ import System (getArgs)
 import System.IO as SIO (putStrLn)
 import Data.ByteString.UTF8 (fromString, toString)
 
+import Text.Regex.PCRE.Light.Extra (compile,caseSensitive,(=~))
+
 import HsAutojump.Config
 import HsAutojump.IO
 import HsAutojump.JumpDB
-import HsAutojump.Regex
 import HsAutojump.Utils
 
 getDBFile = (++ "/.hsautojmp.db") <$> getHomeDirectory
@@ -65,8 +64,8 @@ match (matching,matchSorting) sortOpt path db =
       nub (match (MatchCaseSensitive,matchSorting) sortOpt path db ++ 
            match (MatchCaseInsensitive,matchSorting) sortOpt path db)
 
-match' path caseSensitive db = right findWithRegex regex
+match' path cs db = right findWithRegex regex
   where
-    regex = compileRegex $ regexCase caseSensitive path
+    regex = compile $ caseSensitive cs path
     findWithRegex regex = dbFindByPath (=~ regex) db
 
