@@ -20,6 +20,26 @@ data JumpDB = JumpDB { size :: !Int,
                        dbData :: !(T.Trie Float) }
   deriving(Show)
 
+newtype Strategie = Strategie 
+  { dbApplyStrategie :: ByteString -> JumpDB -> [(ByteString,Float)] }
+
+instance Monoid Strategie where
+    mempty = Strategie $ \ _ _ -> []
+    (Strategie sa) `mappend` (Strategie sb) = Strategie $ \pat db ->
+      sa pat db `mappend` sb pat db
+
+sExact :: Strategie
+sExact = Strategie $ \name db -> 
+  case dbLookup name db of
+    Nothing -> []
+    (Just x) -> [(name,x)]
+
+sMatch :: ([(ByteString, Float)] -> [(ByteString, Float)]) -> Bool -> Strategie
+sMatch sorting caseless = Strategie $ \name db -> 
+   case dbMatch (caseSensitive (not caseless) name) db of
+     Left err -> []
+     Right xs -> sorting xs
+
 emptyDB :: JumpDB
 emptyDB = (JumpDB 0 T.empty)
 
