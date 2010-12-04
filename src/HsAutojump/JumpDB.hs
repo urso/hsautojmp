@@ -1,8 +1,11 @@
+{-# LANGUAGE FlexibleContexts #-}
 
 module HsAutojump.JumpDB where
 
+import Control.Arrow (right)
 import Data.ByteString as BS (ByteString,append)
 import Data.Foldable (foldl')
+import Data.Monoid
 import qualified Data.Trie as T (Trie, size, member, empty, adjust, insert, 
                                  mapBy, toList, fromList, lookup)
 
@@ -10,6 +13,8 @@ import Data.ByteString.UTF8 (fromString)
 
 import HsAutojump.Config
 import HsAutojump.Utils
+
+import Text.Regex.PCRE.Light.Extra
 
 data JumpDB = JumpDB { size :: !Int,
                        dbData :: !(T.Trie Float) }
@@ -41,6 +46,15 @@ dbFindBy f = filter (uncurry f) . dbToList
 
 dbFindByPath :: (ByteString -> Bool) -> JumpDB -> [(ByteString,Float)]
 dbFindByPath f = dbFindBy (const.f)
+
+dbMatch :: (RegexLike (RegexType rl), RegexLike rl) =>
+            rl -> JumpDB -> Either String [(ByteString, Float)]
+dbMatch rl db = right findWithRegex $ compile rl
+  where findWithRegex r = dbFindByPath (=~ r) db
+
+dbMatch' :: (RegexLike (RegexType rl), RegexLike rl) =>
+            rl -> JumpDB -> [(ByteString, Float)]
+dbMatch' rl db = either error id $ dbMatch rl db
 
 dbFindByWeight :: (Float -> Bool) -> JumpDB -> [(ByteString,Float)]
 dbFindByWeight f = dbFindBy (\_ w -> f w)
