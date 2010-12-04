@@ -13,7 +13,7 @@ import System (getArgs)
 import System.IO as SIO (putStrLn)
 import Data.ByteString.UTF8 (fromString, toString)
 
-import Text.Regex.PCRE.Light.Extra (compile,caseSensitive,(=~))
+import Text.Regex.PCRE.Light.Extra (caseSensitive)
 
 import HsAutojump.Config
 import HsAutojump.IO
@@ -64,8 +64,5 @@ match (matching,matchSorting) sortOpt path db =
       nub (match (MatchCaseSensitive,matchSorting) sortOpt path db ++ 
            match (MatchCaseInsensitive,matchSorting) sortOpt path db)
 
-match' path cs db = right findWithRegex regex
-  where
-    regex = compile $ caseSensitive cs path
-    findWithRegex regex = dbFindByPath (=~ regex) db
+match' path cs = dbMatch (caseSensitive cs path)
 
