@@ -2,18 +2,14 @@
 module Main where
 
 import Control.Applicative ((<$>))
-import Control.Arrow (right)
 import Control.Monad (filterM)
-import qualified Data.Trie as T (Trie, mapBy, toList)
 import Data.Foldable (foldl')
-import Data.List (nub)
-import Data.ByteString as BS (ByteString, putStrLn, empty)
+import Data.List (sortBy)
+import Data.ByteString as BS (putStrLn, empty)
 import System.Directory (getHomeDirectory)
 import System (getArgs)
 import System.IO as SIO (putStrLn)
 import Data.ByteString.UTF8 (fromString, toString)
-
-import Text.Regex.PCRE.Light.Extra (caseSensitive)
 
 import HsAutojump.Config
 import HsAutojump.IO
@@ -21,7 +17,7 @@ import HsAutojump.JumpDB
 import HsAutojump.Utils
 
 getDBFile = (++ "/.hsautojmp.db") <$> getHomeDirectory
-getConfigFile = (++ "/.hsautojmp.conf") <$> getHomeDirectory
+-- getConfigFile = (++ "/.hsautojmp.conf") <$> getHomeDirectory
 
 main = do
   args   <- getArgs
@@ -39,30 +35,21 @@ main = do
                   BS.putStrLn
     _          -> SIO.putStrLn "error: unknown command"
 
-cmdAdd args cfg db = adjustSize (maxSize cfg) (numRemove cfg) (snd $ matching cfg) $ 
+cmdAdd args cfg db = adjustSize (maxSize cfg) (numRemove cfg) $ 
                      foldl' (flip (`addEntry` incWeight cfg)) db' $
                      filter (/= homeDirectory cfg) $ map fromString args
   where db' = graduallyForget (maxWeight cfg) db
 
-cmdStats cfg = sortedList Asc (snd $ matching cfg) . dbToList
+cmdStats cfg = sortBy (lowestScore `andThen` longestPath) . dbToList
 
-cmdLstMatch [] cfg    = filterM (isValidPath.fst) . sortedList Des (snd $ matching cfg) . dbToList
-cmdLstMatch (x:_) cfg = filterM (isValidPath.fst) . match (matching cfg) Des (fromString x) 
+cmdLstMatch [] cfg = filterM (isValidPath.fst) . sortBy highestScore . dbToList
+cmdLstMatch (x:_) cfg = filterM (isValidPath.fst) . 
+                          dbApplyStrategie (strategie cfg) (fromString x)
 
-cmdMatch [] cfg (JumpDB _ db) = return BS.empty
+cmdMatch [] _ _ = return BS.empty
 cmdMatch (x:_) cfg db = do
-    lst <- filterM (isValidPath.fst) $ match (matching cfg) Des (fromString x) db
-    return $ case lst of
-               []    -> BS.empty
-               (x:_) -> fst x
-
-match (matching,matchSorting) sortOpt path db = 
-  case matching of
-    MatchCaseSensitive   -> sortedList sortOpt matchSorting $ fromRight [] $ match' path True db
-    MatchCaseInsensitive -> sortedList sortOpt matchSorting $ fromRight [] $  match' path False db
-    MatchCaseSensitiveThenInsensitive -> 
-      nub (match (MatchCaseSensitive,matchSorting) sortOpt path db ++ 
-           match (MatchCaseInsensitive,matchSorting) sortOpt path db)
-
-match' path cs = dbMatch (caseSensitive cs path)
+  lst <- filterM (isValidPath.fst) $ dbApplyStrategie (strategie cfg) (fromString x) db
+  return $ case lst of
+             [] -> BS.empty
+             (x:_) -> fst x
 

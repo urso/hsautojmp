@@ -4,44 +4,37 @@ module HsAutojump.Config where
 import Control.Applicative ((<$>) )
 import Data.Function (on)
 import Data.ByteString as BS (ByteString,length)
+import Data.List (sortBy)
+import Data.Monoid
 import System.Directory (getHomeDirectory)
 import Data.ByteString.UTF8 (fromString)
 
+import HsAutojump.JumpDB
 import HsAutojump.Utils
 
-data MatchCaseSensitivity = MatchCaseSensitive 
-                          | MatchCaseInsensitive 
-                          | MatchCaseSensitiveThenInsensitive
-
-data MatchSorting = MatchShortestFirst
-                  | MatchLongestFirst
-                  | MatchHighestScore
-                  | MatchLowestScore
-
-type ScoringTest = (ByteString, Float) -> (ByteString, Float) -> Ordering
-
-sorting2CmpFn :: ByteString -> MatchSorting -> ScoringTest
-sorting2CmpFn _ MatchShortestFirst = compare `on` (BS.length . fst)
-sorting2CmpFn _ MatchLongestFirst  = invert (compare `on` (BS.length . fst))
-sorting2CmpFn _ MatchLowestScore   = compare `on` snd
-sorting2CmpFn _ MatchHighestScore  = invert (compare `on` snd)
-
-type MatchType = (MatchCaseSensitivity, ScoringTest)
-
 data Configuration = Configuration { maxSize :: Int
-                                   , numRemove :: Int 
+                                   , numRemove :: Int
                                    , maxWeight :: Float
                                    , incWeight :: Float
-                                   , matching :: MatchType
+                                   , strategie :: Strategie
                                    , homeDirectory :: ByteString
                                    }
 
-getDefaultConfig :: IO Configuration
-getDefaultConfig = Configuration 1000 
-                                 100 
-                                 1000
-                                 1
-                                 (MatchCaseSensitiveThenInsensitive, 
-                                  sorting2CmpFn undefined MatchHighestScore) . 
-                                 fromString <$> getHomeDirectory
+highestScore,lowestScore :: ScoringTest
+lowestScore  = compare `on` snd
+highestScore = invert lowestScore
 
+shortestPath,longestPath :: ScoringTest
+shortestPath  = compare `on` (BS.length . fst)
+longestPath   = invert shortestPath
+
+sa `andThen` sb = \x y -> case sa x y of
+                            EQ ->  sb x y
+                            r  ->  r
+
+defaultStrategie = mconcat [sExact, 
+                            sMatch (sortBy highestScore) False, 
+                            sMatch (sortBy highestScore) True]
+
+getDefaultConfig = Configuration 1000 100 1000 1 defaultStrategie . 
+                    fromString <$> getHomeDirectory

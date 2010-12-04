@@ -4,14 +4,15 @@ module HsAutojump.JumpDB where
 
 import Control.Arrow (right)
 import Data.ByteString as BS (ByteString,append)
+import Data.Function (on)
 import Data.Foldable (foldl')
+import Data.List (sortBy,nubBy)
 import Data.Monoid
 import qualified Data.Trie as T (Trie, size, member, empty, adjust, insert, 
                                  mapBy, toList, fromList, lookup)
 
 import Data.ByteString.UTF8 (fromString)
 
-import HsAutojump.Config
 import HsAutojump.Utils
 
 import Text.Regex.PCRE.Light.Extra
@@ -22,6 +23,8 @@ data JumpDB = JumpDB { size :: !Int,
 
 newtype Strategie = Strategie 
   { dbApplyStrategie :: ByteString -> JumpDB -> [(ByteString,Float)] }
+
+type ScoringTest = (ByteString, Float) -> (ByteString, Float) -> Ordering
 
 instance Monoid Strategie where
     mempty = Strategie $ \ _ _ -> []
@@ -94,13 +97,13 @@ graduallyForget maxWeight (JumpDB size db) = JumpDB size $ mapValues forget db
 mapValues :: (a -> a) -> T.Trie a -> T.Trie a
 mapValues = T.mapBy . const . (Just.)
 
-adjustSize :: Int -> Int -> ScoringTest -> JumpDB -> JumpDB
-adjustSize maxSize numRemove matching jdb@(JumpDB size db)
+adjustSize :: Int -> Int -> JumpDB -> JumpDB
+adjustSize maxSize numRemove jdb@(JumpDB size db)
     | size >= maxSize = JumpDB newSize $ upd db
     | otherwise       = jdb
   where
     newSize = maxSize - numRemove 
-    upd = T.fromList . take newSize . sortedList Des matching . T.toList
+    upd = T.fromList . take newSize . nubBy (\x y -> fst x == fst y) . sortBy (invert (compare `on` snd)) . T.toList
 
 showEntry :: (BS.ByteString, Float) -> BS.ByteString
 showEntry (path, w) = fromString ("(" ++ show w ++ "): ") `BS.append` path
