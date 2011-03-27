@@ -23,7 +23,7 @@ Executable hsautojmp
   Build-depends: haskell98 == 1.*, 
                  directory == 1.*, 
                  utf8-string == 0.3.*, 
-                 base == 4.2.*, 
+                 base == 4.*, 
                  binary == 0.5.*, 
                  bytestring == 0.9.*,
                  bytestring-trie == 0.2.*,
@@ -31,6 +31,5 @@ Executable hsautojmp
                  cautious-file == 0.1.*,
                  pcre-light-extra
 
-
-  ghc-options: -O2 -fvia-C -optc -O3
+  ghc-options: -O2 -optc -O3
   
